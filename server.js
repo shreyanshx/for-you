@@ -1,16 +1,21 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const fsSync = require("node:fs");
 const fs = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
+const { TextDecoder } = require("node:util");
 const { URL } = require("node:url");
 
 const MAX_BODY_BYTES = 8 * 1024;
+const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FORBIDDEN_NAME_CHARACTERS = /[\p{Cc}\p{Cf}]/u;
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const PUBLIC_DIR = path.join(__dirname, "public");
 const TEMPLATE_FILE = path.join(__dirname, "views", "response.html");
+const AUDIO_ROUTE = "/assets/background-music.mp3";
 const STATIC_FILES = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/index.html", ["index.html", "text/html; charset=utf-8"]],
@@ -146,6 +151,35 @@ function secureEqual(actual, expected) {
   return crypto.timingSafeEqual(actualDigest, expectedDigest);
 }
 
+function decodeAdminPassword(encoded) {
+  if (typeof encoded !== "string" || !encoded || !BASE64_PATTERN.test(encoded) || encoded.length % 4 !== 0) {
+    throw new Error("ADMIN_PASSWORD_BASE64 must be non-empty canonical Base64.");
+  }
+  const bytes = Buffer.from(encoded, "base64");
+  if (!bytes.length || bytes.toString("base64") !== encoded) {
+    throw new Error("ADMIN_PASSWORD_BASE64 must be non-empty canonical Base64.");
+  }
+  let password;
+  try {
+    password = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error("ADMIN_PASSWORD_BASE64 must decode to valid UTF-8.");
+  }
+  if (!password) throw new Error("ADMIN_PASSWORD_BASE64 must not decode to an empty password.");
+  return password;
+}
+
+function resolveAdminPassword(options) {
+  if (Object.hasOwn(options, "adminPassword") && options.adminPassword !== undefined) return options.adminPassword;
+  if (Object.hasOwn(options, "adminPasswordBase64") && options.adminPasswordBase64 !== undefined) return decodeAdminPassword(options.adminPasswordBase64);
+  const direct = process.env.ADMIN_PASSWORD;
+  const encoded = process.env.ADMIN_PASSWORD_BASE64;
+  if (direct !== undefined && encoded !== undefined) {
+    throw new Error("Set only one of ADMIN_PASSWORD or ADMIN_PASSWORD_BASE64.");
+  }
+  return encoded !== undefined ? decodeAdminPassword(encoded) : direct;
+}
+
 function isAuthorized(request, username, password) {
   const header = request.headers.authorization;
   if (typeof header !== "string" || !header.startsWith("Basic ")) return false;
@@ -164,7 +198,7 @@ function isAuthorized(request, username, password) {
 }
 
 function setSecurityHeaders(response) {
-  response.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+  response.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
   response.setHeader("Referrer-Policy", "no-referrer");
@@ -187,6 +221,84 @@ function sendJson(response, status, value, method = "GET") {
 function methodNotAllowed(response, allowed, method) {
   response.setHeader("Allow", allowed.join(", "));
   sendJson(response, 405, { error: "Method not allowed." }, method);
+}
+
+function parseByteRange(header, size) {
+  if (typeof header !== "string" || !header.startsWith("bytes=") || header.includes(",")) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header);
+  if (!match || (!match[1] && !match[2])) return null;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+    const length = Math.min(suffixLength, size);
+    return { start: size - length, end: size - 1 };
+  }
+  const start = Number(match[1]);
+  const requestedEnd = match[2] ? Number(match[2]) : size - 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start >= size || requestedEnd < start) return null;
+  return { start, end: Math.min(requestedEnd, size - 1) };
+}
+
+async function openAudioFile(audioFile) {
+  if (!audioFile) return null;
+  let handle;
+  try {
+    handle = await fs.open(audioFile, fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW);
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_AUDIO_BYTES) {
+      await handle.close();
+      return null;
+    }
+    return { handle, size: stat.size };
+  } catch (error) {
+    if (handle) await handle.close().catch(() => {});
+    if (["ENOENT", "ENOTDIR", "ELOOP", "EACCES"].includes(error.code)) return null;
+    throw error;
+  }
+}
+
+async function serveAudio(request, response, audioFile) {
+  const opened = await openAudioFile(audioFile);
+  if (!opened) return false;
+  const { handle, size } = opened;
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    await handle.close();
+    methodNotAllowed(response, ["GET", "HEAD"], request.method);
+    return true;
+  }
+
+  const rangeHeader = request.headers.range;
+  const range = rangeHeader === undefined ? { start: 0, end: size - 1 } : parseByteRange(rangeHeader, size);
+  response.setHeader("Accept-Ranges", "bytes");
+  response.setHeader("Cache-Control", "private, no-cache");
+  response.setHeader("Content-Type", "audio/mpeg");
+  if (!range) {
+    await handle.close();
+    response.statusCode = 416;
+    response.setHeader("Content-Range", `bytes */${size}`);
+    response.setHeader("Content-Length", "0");
+    response.end();
+    return true;
+  }
+
+  const partial = rangeHeader !== undefined;
+  const length = range.end - range.start + 1;
+  response.statusCode = partial ? 206 : 200;
+  response.setHeader("Content-Length", String(length));
+  if (partial) response.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${size}`);
+  if (request.method === "HEAD") {
+    await handle.close();
+    response.end();
+    return true;
+  }
+
+  const stream = handle.createReadStream({ start: range.start, end: range.end, autoClose: true });
+  stream.on("error", (error) => {
+    console.error(`Audio stream failed: ${error.message}`);
+    response.destroy();
+  });
+  stream.pipe(response);
+  return true;
 }
 
 async function readJsonBody(request) {
@@ -240,13 +352,15 @@ function renderRows(records) {
 
 function createServer(options = {}) {
   const adminUser = options.adminUser ?? process.env.ADMIN_USER;
-  const adminPassword = options.adminPassword ?? process.env.ADMIN_PASSWORD;
-  if (!adminUser || !adminPassword) {
-    throw new Error("ADMIN_USER and ADMIN_PASSWORD are required. Set both before starting the server.");
+  const adminPassword = resolveAdminPassword(options);
+  if (!adminUser || typeof adminPassword !== "string" || !adminPassword) {
+    throw new Error("ADMIN_USER and one password setting are required. Set ADMIN_PASSWORD or ADMIN_PASSWORD_BASE64 before starting the server.");
   }
   if (adminUser.includes(":")) throw new Error("ADMIN_USER cannot contain a colon.");
 
   const responseFile = options.responseFile ?? process.env.RESPONSE_FILE ?? path.join(process.cwd(), "data", "responses.jsonl");
+  const audioFileSetting = options.backgroundAudioFile ?? process.env.BACKGROUND_AUDIO_FILE;
+  const audioFile = audioFileSetting ? path.resolve(audioFileSetting) : null;
   const trustLoopbackProxy = options.trustProxy ?? process.env.TRUST_PROXY === "loopback";
   const store = new ResponseStore(responseFile);
   const checkRateLimit = createRateLimiter({ ...options.rateLimit, trustLoopbackProxy });
@@ -310,6 +424,12 @@ function createServer(options = {}) {
           .replaceAll("{{TOTAL_SUFFIX}}", records.length === 1 ? "" : "es")
           .replace("{{ROWS}}", renderRows(records));
         return send(response, 200, html, "text/html; charset=utf-8", request.method);
+      }
+
+      if (pathname === AUDIO_ROUTE) {
+        const handled = await serveAudio(request, response, audioFile);
+        if (handled) return;
+        return sendJson(response, 404, { error: "Not found." }, request.method);
       }
 
       const staticFile = STATIC_FILES.get(pathname);

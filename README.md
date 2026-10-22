@@ -1,44 +1,34 @@
 # For You — a tiny romantic invitation
 
-A production-minded, mobile-first invitation built with Node.js 20+ built-in modules and a dependency-free HTML/CSS/JavaScript frontend. It asks for a name locally, stores it only after an explicit **Yes**, celebrates a successfully saved response, and offers a private authenticated response dashboard.
+A production-minded, mobile-first invitation built with Node.js built-ins and dependency-free HTML, CSS, and JavaScript. A guest’s name stays in page memory unless they explicitly choose **Yes**. Accepted responses are stored in a private JSONL file and displayed only through an authenticated operator page.
 
 ## Project structure
 
 ```text
 for-you/
 ├── public/
-│   ├── assets/               # Original transparent PNG character art
-│   ├── dashboard.js          # Local-time enhancement for the private dashboard
-│   ├── index.html            # Accessible invitation markup
-│   ├── script.js             # Name flow, consent, playful No, and celebration
-│   └── styles.css            # Shared responsive invitation/dashboard design
-├── views/response.html       # Server-rendered private dashboard template
-├── data/.gitkeep             # Runtime data directory placeholder
-├── server.js                 # HTTP server, validation, storage, auth, and headers
+│   ├── assets/               # Original PNG art; no music is committed here
+│   ├── dashboard.js          # Local-time enhancement for the private page
+│   ├── index.html            # Accessible invitation and music control
+│   ├── script.js             # Invitation, consent, and audio behavior
+│   └── styles.css            # Responsive invitation/private-page design
+├── scripts/
+│   ├── deploy-ubuntu-ec2.sh  # Interactive Ubuntu EC2 deployer
+│   └── integration-check.js  # One-shot behavior/security check
+├── views/response.html       # Server-rendered private template
+├── data/.gitkeep             # Local runtime-data placeholder
+├── server.js                 # HTTP, validation, storage, auth, audio, headers
 ├── package.json
 └── README.md
 ```
 
-The server only serves an explicit allowlist of files from `public/`; it never exposes the repository root, data, environment files, source templates, or README.
+The server exposes only an explicit static allowlist plus the optional fixed audio URL `/assets/background-music.mp3`. It never recursively serves `public`, the repository root, runtime data, environment files, or templates.
 
-## Customize the invitation
+## Customize and run locally
 
-Edit `PERSONALIZATION` near the top of `public/script.js`:
+Edit `PERSONALIZATION` in `public/script.js` and invitation wording in `public/index.html`. The included PNG characters are original project art. No audio is included.
 
-```js
-const PERSONALIZATION = {
-  senderName: "Your Secret Admirer",
-  dateIdea: "a cozy café and something sweet"
-};
-```
-
-Edit the surrounding wording in `public/index.html` if desired. The guest enters her own name in the opening step. The app keeps that value in page memory only—never in the URL or local storage—and sends it only if she taps **Yes**.
-
-The PNG characters are original artwork created for this project: a pink teddy, a teddy couple, and two distinct white bow-kitty characters. They do not use third-party character names, logos, or artwork.
-
-## Run locally
-
-Requirements: Node.js 20 or newer. No package installation is needed.
+Requirements: Node.js 20 or newer. There are no package dependencies.
 
 ```bash
 cd /path/to/for-you
@@ -47,52 +37,160 @@ export ADMIN_PASSWORD='choose-a-long-unique-local-password'
 node server.js
 ```
 
-Open `http://127.0.0.1:3000`. The private dashboard is at `http://127.0.0.1:3000/response` and prompts for the credentials above. Stop with `Ctrl+C`.
+Open `http://127.0.0.1:3000`. The operator page is at `/response` and uses HTTP Basic Auth. Plain `ADMIN_PASSWORD` remains convenient for local development. Production deployment uses `ADMIN_PASSWORD_BASE64` to avoid systemd `EnvironmentFile` parsing problems:
 
-Optional configuration:
+```bash
+export ADMIN_USER=shreyansh
+export ADMIN_PASSWORD_BASE64="$(printf '%s' 'your local test password' | base64 | tr -d '\n')"
+node server.js
+```
+
+Set exactly one password variable. Base64 is encoding, **not encryption**; protect the environment as a secret. Decoding is strict: malformed/noncanonical Base64, invalid UTF-8, and empty decoded values stop startup.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HOST` | `127.0.0.1` | Listen address |
-| `PORT` | `3000` | Listen port |
-| `RESPONSE_FILE` | `./data/responses.jsonl` | Durable response file |
-| `TRUST_PROXY` | unset | Set to `loopback` only behind the documented local nginx proxy |
-| `ADMIN_USER` | required | Dashboard Basic Auth username |
-| `ADMIN_PASSWORD` | required | Dashboard Basic Auth password |
+| `HOST` | `127.0.0.1` | Node listen address |
+| `PORT` | `3000` | Node listen port |
+| `RESPONSE_FILE` | `./data/responses.jsonl` | Durable accepted-response file |
+| `TRUST_PROXY` | unset | Use `loopback` only behind the documented local nginx proxy |
+| `ADMIN_USER` | required | Basic Auth username (no colon) |
+| `ADMIN_PASSWORD` | alternative | Direct password, intended for local use |
+| `ADMIN_PASSWORD_BASE64` | alternative | Canonical Base64 UTF-8 password, used by the deployer |
+| `BACKGROUND_AUDIO_FILE` | unset | Server-local MP3 exposed only at the fixed audio URL |
 
-The process refuses to start if either admin credential is missing. Do not put credentials in client code, Git, shell history, or this README. Use a long random production password. If any example password has been used or shared, replace it immediately.
+### Optional background music
 
-## Exactly what is stored
+Use only an MP3 you own or are legally licensed to serve. **“Ajeeb Dastan Hai Ye” is copyrighted; you must provide a properly licensed file yourself.** This repository and deployer never download music or embed remote audio URLs.
 
-Each accepted response is one newline-delimited JSON record containing only:
+For local testing, point the server at a regular, non-symlink MP3 no larger than 15 MiB:
 
-- normalized name;
-- UUID request ID (for idempotency);
-- `accepted: true`;
-- server-generated ISO 8601 timestamp.
+```bash
+export BACKGROUND_AUDIO_FILE=/absolute/path/to/licensed-music.mp3
+```
 
-IP addresses, user agents, No-button attempts, declines, and “Maybe another day” choices are never persisted. The in-memory rate limiter uses a process-randomized one-way key and disappears on restart. Concurrent appends are serialized, and request IDs already on disk are loaded at startup so retries do not create duplicate records.
+The file remains outside the repository/public allowlist. The server opens it without following symlinks and streams GET or HEAD responses with single-byte-range support (`206`/`416`), `audio/mpeg`, and private/no-cache policy. Missing, invalid, oversized, or unconfigured audio quietly returns 404.
 
-Runtime JSONL files are ignored by Git. Treat the response file as private personal data.
+The page sets volume to 10%, tries autoplay, and retries once after the first trusted interaction. Browsers commonly block autoplay; the visible play/pause control always remains available. A user-initiated pause is respected. If the source is unavailable, the control hides gracefully.
 
-## Private dashboard
+## Data, privacy, and credentials
 
-Visit `/response` or `/response/` and authenticate with HTTP Basic Auth. The server uses constant-time credential comparison, escapes stored values, renders newest responses first, and applies `Cache-Control: no-store` plus `X-Robots-Tag: noindex, nofollow`. The dashboard shows accepted count, name, accepted status, UTC time, and browser-local time.
+Each accepted response is one newline-delimited JSON object containing only the normalized name, a UUID retry ID, `accepted: true`, and a server-generated timestamp. IP addresses, user agents, declines, and button attempts are not persisted. Writes are serialized, synced before success, and deduplicated across restarts.
 
-**Basic Auth sends a reusable credential on every request. HTTPS is required outside loopback.** Do not expose production `/response` over plain HTTP.
+The attendee page truthfully explains collection without exposing or hinting at the operator URL. There is intentionally no attendee-facing link to `/response`; operators enter that URL themselves. The private page escapes stored values, renders newest first, uses constant-time credential checks, throttles failed authentication, and sends `Cache-Control: no-store` and `X-Robots-Tag: noindex, nofollow`.
 
-## Backup and delete data
+Basic Auth sends a reusable credential with each request. Never expose submissions or authentication over plain HTTP. The deployer fails closed rather than leaving the app available as an insecure fallback when trusted TLS setup fails.
 
-For the production paths below, create a root-readable backup:
+## Automated Ubuntu EC2 deployment
+
+`scripts/deploy-ubuntu-ec2.sh` is a rerunnable interactive deployer for Ubuntu 22.04 and 24.04. It requires `/dev/tty` so secrets cannot be supplied accidentally through a noninteractive pipeline.
+
+### Bootstrap a fresh Ubuntu EC2 instance
+
+After this change is merged into the repository's default branch, run the following on the EC2 instance. This bootstrap installs only `curl` and CA certificates; the downloaded deployer installs Git and every remaining dependency, then clones the repository itself:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+curl --fail --silent --show-error --location \
+  https://raw.githubusercontent.com/shreyanshx/for-you/refs/heads/kiro/romantic-date-site/scripts/deploy-ubuntu-ec2.sh \
+  --output /tmp/deploy-for-you.sh
+chmod 700 /tmp/deploy-for-you.sh
+sudo /tmp/deploy-for-you.sh
+rm -f /tmp/deploy-for-you.sh
+```
+
+Review the downloaded script before executing it when possible. Alternatively, obtain a trusted checkout manually and run `sudo ./scripts/deploy-ubuntu-ec2.sh` from it.
+
+The deployer always stages a fresh Git clone. Its default source is `https://github.com/shreyanshx/for-you.git`; optional environment overrides select another reviewed HTTPS repository and ref:
+
+```bash
+sudo REPO_URL=https://github.com/shreyanshx/for-you.git \
+  REPO_REF=main \
+  ./scripts/deploy-ubuntu-ec2.sh
+```
+
+`REPO_REF` may be a branch, tag, or fetchable commit/ref. The exact staged commit is printed, syntax/integration checks run before promotion, and no repository setup script is executed.
+
+### Before running: AWS networking
+
+The script configures UFW, not the EC2 security group. In the AWS security group:
+
+- allow inbound TCP 80 and 443 from intended attendees;
+- restrict SSH/22 to trusted administrator addresses;
+- **never** allow inbound port 3000.
+
+The script allows OpenSSH before enabling UFW, allows `Nginx Full`, explicitly denies 3000, and binds Node to `127.0.0.1:3000`.
+
+### What the deployer does
+
+It prompts for either `domain` or `public-ip` mode, a certificate email, optional licensed MP3 path, operator username (default `shreyansh`), and the password twice with hidden input. Usernames are limited to letters, numbers, `.`, `_`, and `-`. Passwords shorter than 8 characters are rejected; passwords from 8–11 characters produce a warning.
+
+It then:
+
+1. installs `git`, `curl`, `ca-certificates`, `gnupg`, `nginx`, `ufw`, and `snapd` with apt;
+2. installs Node.js 22 from NodeSource and current Certbot from the classic snap;
+3. creates/locks the `for-you` service account and applies a hardened systemd unit;
+4. verifies a staged clone, publishes root-owned read-only code atomically, and retains the prior release for rollback;
+5. preserves response data and music under `/var/lib/for-you` on every rerun;
+6. atomically writes `/etc/for-you.env` as `root:root` mode `600`, storing only `ADMIN_PASSWORD_BASE64`, never the raw password;
+7. starts/restarts Node only after credentials are written, checks loopback health, then obtains trusted TLS;
+8. validates nginx before each script-managed reload, validates HTTPS publicly, and prints attendee/private URLs without credentials.
+
+If the new app fails its loopback health check, the previous code, environment file, and systemd unit are restored and health-checked when a complete prior runtime exists. HTTP serves only ACME challenges plus a 503 until a certificate exists; on reruns, an existing certificate keeps the TLS proxy active. If certificate setup or HTTPS validation fails, the script retains that fail-closed shape rather than exposing submissions or Basic Auth insecurely. Correct the reported issue and rerun.
+
+### Domain certificates
+
+Choose `domain`, enter a fully qualified hostname, and ensure its DNS already resolves to the instance. The script first configures nginx/ACME HTTP service, checks app health, then runs Certbot’s nginx plugin noninteractively with redirect enabled. Ports 80 and 443 must be reachable.
+
+### Modern public-IP certificates
+
+Choose `public-ip` to use an IPv4 address directly. The script tries AWS IMDSv2 first and asks you to confirm the detected address; manual entry is available. It requires Certbot 5.4+ and uses the official webroot command shape:
+
+```bash
+certbot certonly \
+  --preferred-profile shortlived \
+  --webroot \
+  --webroot-path /var/www/for-you-acme \
+  --ip-address 203.0.113.10
+```
+
+It then installs explicit nginx TLS paths under `/etc/letsencrypt/live/<IP>/` and redirects HTTP to HTTPS. As explained in Let’s Encrypt’s [March 2026 IP certificate announcement](https://letsencrypt.org/2026/03/11/shorter-certs-certbot), IP certificates use the required six-day `shortlived` profile; Certbot 5.4+ is needed for IP webroot support, and Certbot does not install the web-server configuration for you. Automatic renewal is therefore essential. The script installs an executable deploy hook that runs `nginx -t` before reload, while snap’s Certbot timer handles frequent renewal attempts. Verify the timer after deployment.
+
+Content from the linked Let’s Encrypt article was rephrased for compliance with licensing restrictions.
+
+### Generated and persistent paths
+
+| Path | Purpose / rerun behavior |
+|---|---|
+| `/opt/for-you` | Current root-owned, read-only app release; atomically replaced |
+| `/opt/for-you.rollback.<UTC>` | Previous code retained after successful promotion |
+| `/opt/for-you.failed.<UTC>` | Failed release retained after rollback |
+| `/var/lib/for-you/responses.jsonl` | Persistent private responses; never replaced by deploy |
+| `/var/lib/for-you/background-music.mp3` | Optional persistent user-supplied MP3, service-owned mode 600 |
+| `/etc/for-you.env` | Atomic root-only runtime configuration |
+| `/etc/systemd/system/for-you.service` | Hardened systemd service |
+| `/etc/nginx/sites-available/for-you` | Managed HTTP/TLS nginx site |
+| `/etc/nginx/sites-enabled/for-you` | Site symlink; nginx default symlink is disabled |
+| `/var/www/for-you-acme` | ACME HTTP-01 webroot |
+| `/etc/letsencrypt/` | Certbot account, renewal, and certificates |
+| `/etc/letsencrypt/renewal-hooks/deploy/for-you-nginx` | Validating nginx renewal deploy hook |
+| `/root/for-you-deploy.*` | Root-only temporary clone, removed on exit |
+
+Blank audio input preserves existing deployed music. Supplying a new path validates a regular non-symlink `.mp3`, enforces the 15 MiB limit, and atomically replaces only the persistent music file. Reruns replace app code/configuration but not JSONL data.
+
+## Backup and deletion
+
+Back up private response data before upgrades or manual edits:
 
 ```bash
 sudo install -d -m 700 -o root -g root /var/backups/for-you
-sudo cp --preserve=mode,timestamps /var/lib/for-you/responses.jsonl "/var/backups/for-you/responses-$(date -u +%Y%m%dT%H%M%SZ).jsonl"
+sudo cp --preserve=mode,timestamps /var/lib/for-you/responses.jsonl \
+  "/var/backups/for-you/responses-$(date -u +%Y%m%dT%H%M%SZ).jsonl"
 sudo chown root:root /var/backups/for-you/responses-*.jsonl
 sudo chmod 600 /var/backups/for-you/responses-*.jsonl
 ```
 
-To delete all responses safely:
+Delete all responses without racing an append:
 
 ```bash
 sudo systemctl stop for-you
@@ -100,215 +198,41 @@ sudo -u for-you truncate -s 0 /var/lib/for-you/responses.jsonl
 sudo systemctl start for-you
 ```
 
-To delete one record, first make a backup, stop the service, use `sudoedit /var/lib/for-you/responses.jsonl` to remove exactly that JSON line, preserve one complete JSON object per line, then restart. Stopping avoids racing an append. Delete old backups too when they are no longer required.
+To delete one record, back up, stop the service, edit exactly one complete JSON line with `sudoedit`, and restart. Delete expired backups according to your retention policy. Back up the optional MP3 separately only if your license and recovery plan require it.
 
-## Production deployment on Ubuntu EC2
+## Verification and troubleshooting
 
-These commands target Ubuntu 22.04/24.04. In the EC2 security group, allow inbound TCP **80 and 443 only** from the internet. Restrict SSH/22 to a trusted administrator IP. Never expose port 3000.
-
-### 1. Install Node.js 22 LTS and nginx
+Run the complete local verification:
 
 ```bash
-sudo apt update
-sudo apt install -y ca-certificates curl gnupg nginx ufw
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
-node --version
-sudo systemctl enable --now nginx
+npm run verify
+git diff --check
 ```
 
-If UFW is used, keep SSH available before enabling it, and expose only nginx:
+`npm run check` performs Node syntax checks, `bash -n` on the deployer, and ShellCheck when it is already installed (ShellCheck is not a project dependency). The integration check covers persistence, idempotency, direct/Base64 auth, authenticated private-page access, output escaping, static isolation, audio GET/HEAD/ranges/416/missing behavior, CSP, and absence of private-route hints from attendee assets.
+
+Useful production diagnostics:
 
 ```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
-sudo ufw deny 3000/tcp
-sudo ufw enable
-sudo ufw status verbose
-```
-
-### 2. Create a locked-down service account and directories
-
-```bash
-sudo useradd --system --home /var/lib/for-you --shell /usr/sbin/nologin for-you
-sudo install -d -m 755 -o root -g root /opt/for-you
-sudo install -d -m 700 -o for-you -g for-you /var/lib/for-you
-```
-
-Copy a reviewed release into `/opt/for-you` (with `scp`, your CI artifact, or a checked-out release), then enforce read-only application ownership:
-
-```bash
-sudo cp -a /path/to/release/. /opt/for-you/
-sudo chown -R root:root /opt/for-you
-sudo find /opt/for-you -type d -exec chmod 755 {} +
-sudo find /opt/for-you -type f -exec chmod 644 {} +
-sudo chmod 700 /var/lib/for-you
-sudo chown -R for-you:for-you /var/lib/for-you
-```
-
-### 3. Create the private environment file
-
-Create a root-owned file without placing its values in the unit or repository:
-
-```bash
-sudo install -m 600 -o root -g root /dev/null /etc/for-you.env
-sudoedit /etc/for-you.env
-```
-
-Set these lines, choosing a new long random password:
-
-```dotenv
-HOST=127.0.0.1
-PORT=3000
-RESPONSE_FILE=/var/lib/for-you/responses.jsonl
-TRUST_PROXY=loopback
-ADMIN_USER=shreyansh
-ADMIN_PASSWORD=replace-with-a-long-random-secret
-```
-
-Then confirm permissions without printing the secret:
-
-```bash
-sudo chown root:root /etc/for-you.env
-sudo chmod 600 /etc/for-you.env
-sudo stat -c '%U %G %a %n' /etc/for-you.env
-```
-
-### 4. Install a hardened systemd service
-
-```bash
-sudo tee /etc/systemd/system/for-you.service >/dev/null <<'UNIT'
-[Unit]
-Description=For You romantic invitation
-After=network.target
-
-[Service]
-Type=simple
-User=for-you
-Group=for-you
-WorkingDirectory=/opt/for-you
-EnvironmentFile=/etc/for-you.env
-ExecStart=/usr/bin/node /opt/for-you/server.js
-Restart=on-failure
-RestartSec=3
-UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-PrivateDevices=true
-ProtectSystem=strict
-ProtectHome=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-ProtectClock=true
-ProtectHostname=true
-RestrictSUIDSGID=true
-LockPersonality=true
-CapabilityBoundingSet=
-AmbientCapabilities=
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ReadWritePaths=/var/lib/for-you
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-sudo systemctl daemon-reload
-sudo systemctl enable --now for-you
-sudo systemctl status for-you --no-pager
-curl --fail --silent --show-error http://127.0.0.1:3000/health
-```
-
-The health response should be `{"status":"ok"}`.
-
-### 5. Configure nginx as the only public listener
-
-```bash
-sudo tee /etc/nginx/sites-available/for-you >/dev/null <<'NGINX'
-server {
-    listen 80;
-    listen [::]:80;
-    server_name example.com www.example.com;
-
-    client_max_body_size 8k;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header Connection "";
-    }
-
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "no-referrer" always;
-    add_header X-Frame-Options "DENY" always;
-}
-NGINX
-sudo ln -sfn /etc/nginx/sites-available/for-you /etc/nginx/sites-enabled/for-you
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
-curl --fail --silent --show-error -H 'Host: example.com' http://127.0.0.1/health
-```
-
-Replace the example domains. Do not add a security-group or UFW rule for 3000; Node remains bound to loopback.
-
-### 6. Enable HTTPS with Certbot
-
-Point the domain’s DNS records at the EC2 public/Elastic IP, wait for resolution, and keep ports 80/443 reachable:
-
-```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d example.com -d www.example.com
-sudo certbot renew --dry-run
-sudo nginx -t
-sudo systemctl reload nginx
-curl --fail --silent --show-error https://example.com/health
-```
-
-Choose Certbot’s HTTP-to-HTTPS redirect. After HTTPS works, you may add `add_header Strict-Transport-Security "max-age=31536000" always;` to the TLS server block, then run `sudo nginx -t && sudo systemctl reload nginx`.
-
-### Logs and troubleshooting
-
-```bash
+sudo systemctl status for-you nginx --no-pager
 sudo journalctl -u for-you -n 100 --no-pager
-sudo journalctl -u for-you -f
 sudo tail -n 100 /var/log/nginx/error.log
-sudo ss -ltnp | grep -E ':(80|443|3000)\b'
-```
-
-The application intentionally does not log submitted names or request bodies.
-
-### Safe update workflow
-
-Build or check out the new release in a separate directory, back up the JSONL file, then replace only application code. Never overwrite `/var/lib/for-you` or `/etc/for-you.env`:
-
-```bash
-cd /path/to/new/release
-node --check server.js
-node --check public/script.js
-node --check public/dashboard.js
-sudo systemctl stop for-you
-sudo cp -a /opt/for-you "/opt/for-you.backup-$(date -u +%Y%m%dT%H%M%SZ)"
-sudo rm -rf /opt/for-you.new
-sudo install -d -m 755 -o root -g root /opt/for-you.new
-sudo cp -a . /opt/for-you.new/
-sudo chown -R root:root /opt/for-you.new
-sudo mv /opt/for-you /opt/for-you.old
-sudo mv /opt/for-you.new /opt/for-you
-sudo systemctl start for-you
-curl --fail --silent --show-error http://127.0.0.1:3000/health
 sudo nginx -t
+curl --fail --silent --show-error http://127.0.0.1:3000/health
+curl --fail --silent --show-error https://YOUR_DOMAIN_OR_IP/health
+sudo ss -ltnp | grep -E ':(80|443|3000)\b'
+sudo snap services certbot
+sudo certbot renew --dry-run
+sudo stat -c '%U %G %a %n' /etc/for-you.env /var/lib/for-you
 ```
 
-After verification, remove `/opt/for-you.old` and time-stamped code backups according to your retention policy. Response data remains under `/var/lib/for-you` throughout.
+If Node health fails, inspect `journalctl`, verify Node 22 and environment-file permissions, and confirm the service user can write `/var/lib/for-you`. If ACME fails, verify public DNS/IP, AWS security-group and UFW rules, port 80 reachability, Certbot version, and the ACME webroot. If audio is absent, inspect the service-owned MP3’s type, symlink status, size, and mode; do not move it into `public`.
 
 ## Security and accessibility notes
 
-- Requests are capped at 8 KiB, require JSON and same-origin when an Origin header is available, validate names and UUIDs, and are rate-limited without persistent network identifiers. Behind the documented nginx setup, `TRUST_PROXY=loopback` safely separates client quotas while accepting forwarding headers only from a loopback peer.
-- Dashboard authentication failures have a separate in-memory throttle, and response writes are flushed to disk before success is returned. Startup waits for storage readiness and direct-process shutdown drains active work.
-- Static serving is allowlist-only; unknown routes and unsupported methods return explicit errors.
-- CSP permits local scripts, styles, images, and same-origin API calls only. Additional headers prevent sniffing, framing, referrer leakage, and unnecessary browser capabilities.
-- The interface uses semantic markup, visible labels and errors, keyboard focus, large touch targets, live save status, reduced-motion support, safe-area padding, and layouts down to 320 px.
-- The playful No button evades pointer, touch, and keyboard activation. Yes always remains reachable. After five No attempts, “Maybe another day” provides a respectful local-only exit that saves nothing.
+- Request bodies are capped at 8 KiB, require JSON and same-origin when supplied, validate names/UUIDs, and are rate-limited with process-randomized network keys.
+- `TRUST_PROXY=loopback` accepts forwarding headers only from loopback nginx, separating client quotas without trusting public peers.
+- Static serving is allowlist-only. Audio has one fixed URL, one configured server-local file, no symlink following, and a 15 MiB cap.
+- CSP permits only same-origin scripts, styles, images, media, and API calls. Additional headers prevent sniffing, framing, referrer leakage, and unnecessary browser capabilities.
+- The interface uses semantic markup, visible labels/errors/status, keyboard focus, large touch targets, reduced-motion support, safe-area padding, and layouts down to 320 px.
+- The playful No button never makes Yes unreachable; after repeated attempts, a respectful local-only exit saves nothing.

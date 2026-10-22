@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/script.js && node --check public/dashboard.js && node --check scripts/integration-check.js",
+    "check": "node --check server.js && node --check public/script.js && node --check public/dashboard.js && node --check scripts/integration-check.js && bash -n scripts/deploy-ubuntu-ec2.sh && if command -v shellcheck >/dev/null 2>&1; then shellcheck scripts/deploy-ubuntu-ec2.sh; fi",
     "verify": "npm run check && node scripts/integration-check.js"
   },
   "engines": {

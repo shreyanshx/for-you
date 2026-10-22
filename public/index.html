@@ -19,6 +19,17 @@
     <span class="petal petal--7">♥</span><span class="petal petal--8">✦</span>
   </div>
 
+  <aside class="music-control" id="musicControl" aria-label="Background music">
+    <audio id="backgroundMusic" preload="none" loop>
+      <source src="/assets/background-music.mp3" type="audio/mpeg">
+    </audio>
+    <button class="music-button" id="musicButton" type="button" aria-pressed="false" aria-describedby="musicStatus">
+      <span class="music-icon" aria-hidden="true">♫</span>
+      <span id="musicButtonLabel">Play music</span>
+    </button>
+    <span class="music-status" id="musicStatus" role="status" aria-live="polite">Music is ready.</span>
+  </aside>
+
   <main class="page-shell">
     <article class="invitation-card" aria-live="polite">
       <div class="card-ribbon" aria-hidden="true"><span>made with</span><b>♥</b></div>
