@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#c94d77">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Accepted invitations · For You</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/dashboard.js" defer></script>
+</head>
+<body class="dashboard-page">
+  <main class="dashboard-shell">
+    <section class="dashboard-card" aria-labelledby="dashboardTitle">
+      <div class="dashboard-heading">
+        <div>
+          <p class="eyebrow dashboard-eyebrow">Private garden</p>
+          <h1 id="dashboardTitle">Accepted invitations</h1>
+          <p class="dashboard-intro">A private list of the people who tapped Yes. Times are recorded in UTC and shown in your local time when JavaScript is available.</p>
+        </div>
+        <div class="total-bloom" aria-label="{{TOTAL}} accepted responses"><strong>{{TOTAL}}</strong><span>yes{{TOTAL_SUFFIX}}</span></div>
+      </div>
+      <a class="refresh-link" href="/response">Refresh <span aria-hidden="true">↻</span></a>
+      <div class="response-list" role="list">
+        {{ROWS}}
+      </div>
+      <p class="dashboard-foot">Only accepted responses are stored. Keep this page protected with HTTPS. ♡</p>
+    </section>
+  </main>
+</body>
+</html>

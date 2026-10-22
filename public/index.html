@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ef9eb6">
+  <meta name="description" content="A tiny, heartfelt invitation made just for you.">
+  <title>A little question for you…</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+</head>
+<body>
+  <div class="page-glow page-glow--one" aria-hidden="true"></div>
+  <div class="page-glow page-glow--two" aria-hidden="true"></div>
+  <div class="petal-field" aria-hidden="true">
+    <span class="petal petal--1">♥</span><span class="petal petal--2">✦</span>
+    <span class="petal petal--3">❀</span><span class="petal petal--4">♥</span>
+    <span class="petal petal--5">✧</span><span class="petal petal--6">❀</span>
+    <span class="petal petal--7">♥</span><span class="petal petal--8">✦</span>
+  </div>
+
+  <main class="page-shell">
+    <article class="invitation-card" aria-live="polite">
+      <div class="card-ribbon" aria-hidden="true"><span>made with</span><b>♥</b></div>
+      <img class="kitty-sticker kitty-sticker--left" src="/assets/bow-kitty-pink.png" alt="" width="240" height="240">
+      <img class="kitty-sticker kitty-sticker--right" src="/assets/bow-kitty-rose.png" alt="" width="240" height="240">
+
+      <section class="name-step" id="nameStep" aria-labelledby="nameTitle">
+        <div class="mini-sparkles" aria-hidden="true">✦ ♡ ✧</div>
+        <img class="welcome-teddy" src="/assets/pink-teddy.png" alt="A cuddly pink teddy holding a heart" width="600" height="520">
+        <p class="eyebrow">A little love note</p>
+        <h1 id="nameTitle">What should this teddy call you?</h1>
+        <p class="name-intro">There’s a tiny question waiting behind this rosy door.</p>
+        <form class="name-form" id="nameForm" novalidate>
+          <label for="nameInput">Your name</label>
+          <div class="input-wrap"><span aria-hidden="true">♡</span><input id="nameInput" name="name" type="text" maxlength="60" autocomplete="name" enterkeyhint="done" aria-describedby="nameHint nameError" required></div>
+          <p class="field-hint" id="nameHint">Up to 60 characters — just enough for something sweet.</p>
+          <p class="field-error" id="nameError" role="alert"></p>
+          <button class="primary-btn" type="submit">Open my invitation <span aria-hidden="true">✦</span></button>
+        </form>
+        <p class="privacy-note"><span aria-hidden="true">🔒</span> Your name is saved only if you tap Yes.</p>
+      </section>
+
+      <section class="invitation-content" id="invitationContent" aria-labelledby="questionTitle" hidden>
+        <p class="eyebrow">A tiny question for <span data-guest>you</span></p>
+        <div class="character-stage">
+          <span class="sparkle-dot sparkle-dot--one" aria-hidden="true">✦</span>
+          <img class="hero-teddy" src="/assets/pink-teddy.png" alt="A pink teddy offering you a heart" width="600" height="520">
+          <img class="side-kitty side-kitty--one" src="/assets/bow-kitty-pink.png" alt="" width="240" height="240">
+          <img class="side-kitty side-kitty--two" src="/assets/bow-kitty-rose.png" alt="" width="240" height="240">
+        </div>
+        <div class="copy-block">
+          <h2 id="questionTitle" tabindex="-1">Will you go on a date with me?</h2>
+          <p class="subcopy">I have a little plan involving <span data-date-idea>a cozy café and something sweet</span>… and it would be infinitely better with you.</p>
+        </div>
+        <div class="action-area" id="actionArea" aria-label="Choose your answer">
+          <button class="answer-btn yes-btn" id="yesButton" type="button"><span>Yes, I'd love to!</span><span aria-hidden="true">♡</span></button>
+          <button class="answer-btn no-btn" id="noButton" type="button">No</button>
+          <p class="plea" id="pleaMessage" aria-live="polite">Choose with your heart ✨</p>
+        </div>
+        <button class="maybe-btn" id="maybeButton" type="button" hidden>Maybe another day</button>
+        <p class="save-status" id="saveStatus" role="status" aria-live="polite"></p>
+        <p class="privacy-note privacy-note--compact"><span aria-hidden="true">🔒</span> If you tap Yes, your name, a retry ID, and the time are saved privately for the sender. Ask them anytime to delete it; nothing is saved otherwise.</p>
+        <p class="signature">with butterflies, <span data-sender>someone special</span></p>
+      </section>
+
+      <section class="celebration" id="celebration" aria-labelledby="celebrationTitle" hidden>
+        <div class="celebration-burst" aria-hidden="true">♥</div>
+        <p class="eyebrow">Best answer ever!</p>
+        <h2 id="celebrationTitle" tabindex="-1">It’s a date, <span data-guest>cutie</span>! 💕</h2>
+        <img class="couple-art" src="/assets/teddy-couple.png" alt="Two happy teddy bears cuddling beneath hearts" width="640" height="420">
+        <p class="celebration-copy">You just made <span data-sender>someone special</span> the happiest person. I can’t wait for <span data-date-idea>a cozy café and something sweet</span> with you.</p>
+        <div class="date-ticket" aria-label="Date confirmed"><span class="ticket-icon" aria-hidden="true">♡</span><div><small>OUR LITTLE DATE</small><strong>Can’t wait to see you!</strong></div><span class="ticket-stars" aria-hidden="true">✦ ✧</span></div>
+        <p class="celebration-signoff">See you soon <span aria-hidden="true">🌷</span></p>
+        <div class="confetti" id="confetti" aria-hidden="true"></div>
+      </section>
+
+      <section class="goodbye" id="goodbye" aria-labelledby="goodbyeTitle" hidden>
+        <img class="couple-art goodbye-art" src="/assets/bow-kitty-rose.png" alt="A little bow kitty waving goodbye" width="240" height="240">
+        <p class="eyebrow">No worries at all</p>
+        <h2 id="goodbyeTitle" tabindex="-1">Another day can be lovely too 🌷</h2>
+        <p>Thank you for stopping by, <span data-guest>sweet friend</span>. No answer was sent or saved.</p>
+        <span class="goodbye-heart" aria-hidden="true">♡</span>
+      </section>
+    </article>
+  </main>
+  <footer class="page-footer">A little corner of the internet, made just for you <span aria-hidden="true">♡</span></footer>
+</body>
+</html>
