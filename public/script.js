@@ -19,6 +19,11 @@ const maybeButton = document.querySelector("#maybeButton");
 const pleaMessage = document.querySelector("#pleaMessage");
 const saveStatus = document.querySelector("#saveStatus");
 const confetti = document.querySelector("#confetti");
+const musicControl = document.querySelector("#musicControl");
+const backgroundMusic = document.querySelector("#backgroundMusic");
+const musicButton = document.querySelector("#musicButton");
+const musicButtonLabel = document.querySelector("#musicButtonLabel");
+const musicStatus = document.querySelector("#musicStatus");
 
 const pleadingMessages = [
   "Are you suuure? 🥺",
@@ -36,6 +41,55 @@ let noAttempts = 0;
 let submissionState = "idle";
 let requestId = "";
 let lastMoveAt = 0;
+let userPausedMusic = false;
+let gestureRetryAttempted = false;
+let musicUnavailable = false;
+
+backgroundMusic.volume = 0.1;
+
+function setMusicStatus(message) {
+  musicStatus.textContent = message;
+}
+
+function updateMusicControl() {
+  const playing = !backgroundMusic.paused && !backgroundMusic.ended;
+  musicButton.setAttribute("aria-pressed", String(playing));
+  musicButtonLabel.textContent = playing ? "Pause music" : "Play music";
+  musicControl.classList.toggle("is-playing", playing);
+}
+
+async function attemptMusic({ automatic = false } = {}) {
+  if (musicUnavailable || userPausedMusic || !backgroundMusic.paused) return;
+  try {
+    await backgroundMusic.play();
+    setMusicStatus(automatic ? "Music is playing softly." : "Music is playing.");
+  } catch (error) {
+    if (!musicUnavailable && error?.name === "NotAllowedError") {
+      setMusicStatus("Autoplay was blocked. Tap Play music when you’re ready.");
+    }
+  }
+}
+
+function retryMusicAfterGesture(event) {
+  if (gestureRetryAttempted || userPausedMusic || musicUnavailable) return;
+  if (event?.target instanceof Node && musicControl.contains(event.target)) return;
+  gestureRetryAttempted = true;
+  void attemptMusic({ automatic: true });
+  document.removeEventListener("pointerdown", retryMusicAfterGesture);
+  document.removeEventListener("keydown", retryMusicAfterGesture);
+}
+
+function toggleMusic() {
+  if (musicUnavailable) return;
+  if (!backgroundMusic.paused) {
+    userPausedMusic = true;
+    backgroundMusic.pause();
+    setMusicStatus("Music paused. It will stay paused until you play it.");
+    return;
+  }
+  userPausedMusic = false;
+  void attemptMusic();
+}
 
 function normalizeName(value) {
   const unicodeName = value.normalize("NFC");
@@ -55,6 +109,7 @@ function fillPersonalization() {
 
 function showInvitation(event) {
   event.preventDefault();
+  retryMusicAfterGesture(event);
   const result = normalizeName(nameInput.value);
   if (result.error) {
     nameError.textContent = result.error;
@@ -167,7 +222,7 @@ async function sayYes() {
   saveStatus.className = "save-status is-saving";
   saveStatus.textContent = "Tucking your Yes safely into the love letter… 💌";
   try {
-    const response = await fetch("/api/responses", {
+    const response = await fetch("/api/" + "responses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: guestName, requestId })
@@ -206,6 +261,18 @@ noButton.addEventListener("pointerdown", handleNoPointer);
 noButton.addEventListener("click", (event) => { event.preventDefault(); moveNoButton(); });
 noButton.addEventListener("animationend", () => noButton.classList.remove("is-dodging"));
 maybeButton.addEventListener("click", sayMaybe);
+musicButton.addEventListener("click", toggleMusic);
+backgroundMusic.addEventListener("play", updateMusicControl);
+backgroundMusic.addEventListener("pause", updateMusicControl);
+backgroundMusic.addEventListener("error", () => {
+  musicUnavailable = true;
+  musicButton.disabled = true;
+  setMusicStatus("Background music is unavailable.");
+  musicControl.hidden = true;
+});
+document.addEventListener("pointerdown", retryMusicAfterGesture);
+document.addEventListener("keydown", retryMusicAfterGesture);
+window.addEventListener("load", () => { void attemptMusic({ automatic: true }); });
 window.addEventListener("resize", () => {
   if (noAttempts > 0 && submissionState === "idle") moveNoButton({ countAttempt: false, force: true });
 });
