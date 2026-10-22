@@ -92,7 +92,7 @@ After this change is merged into the repository's default branch, run the follow
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl
 curl --fail --silent --show-error --location \
-  https://raw.githubusercontent.com/shreyanshx/for-you/kiro/romantic-date-site/scripts/deploy-ubuntu-ec2.sh \
+  https://raw.githubusercontent.com/shreyanshx/for-you/refs/heads/kiro/romantic-date-site/scripts/deploy-ubuntu-ec2.sh \
   --output /tmp/deploy-for-you.sh
 chmod 700 /tmp/deploy-for-you.sh
 sudo /tmp/deploy-for-you.sh
