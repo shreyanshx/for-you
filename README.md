@@ -82,15 +82,26 @@ Basic Auth sends a reusable credential with each request. Never expose submissio
 
 ## Automated Ubuntu EC2 deployment
 
-`scripts/deploy-ubuntu-ec2.sh` is a rerunnable interactive deployer for Ubuntu 22.04 and 24.04. Run it from a trusted checkout with `sudo`; it requires `/dev/tty` so secrets cannot be supplied accidentally through a noninteractive pipeline:
+`scripts/deploy-ubuntu-ec2.sh` is a rerunnable interactive deployer for Ubuntu 22.04 and 24.04. It requires `/dev/tty` so secrets cannot be supplied accidentally through a noninteractive pipeline.
+
+### Bootstrap a fresh Ubuntu EC2 instance
+
+After this change is merged into the repository's default branch, run the following on the EC2 instance. This bootstrap installs only `curl` and CA certificates; the downloaded deployer installs Git and every remaining dependency, then clones the repository itself:
 
 ```bash
-git clone https://github.com/shreyanshx/for-you.git
-cd for-you
-sudo ./scripts/deploy-ubuntu-ec2.sh
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+curl --fail --silent --show-error --location \
+  https://raw.githubusercontent.com/shreyanshx/for-you/kiro/romantic-date-site/scripts/deploy-ubuntu-ec2.sh \
+  --output /tmp/deploy-for-you.sh
+chmod 700 /tmp/deploy-for-you.sh
+sudo /tmp/deploy-for-you.sh
+rm -f /tmp/deploy-for-you.sh
 ```
 
-The script always stages a fresh Git clone. Its default source is `https://github.com/shreyanshx/for-you.git`; optional environment overrides select another reviewed HTTPS repository and ref:
+Review the downloaded script before executing it when possible. Alternatively, obtain a trusted checkout manually and run `sudo ./scripts/deploy-ubuntu-ec2.sh` from it.
+
+The deployer always stages a fresh Git clone. Its default source is `https://github.com/shreyanshx/for-you.git`; optional environment overrides select another reviewed HTTPS repository and ref:
 
 ```bash
 sudo REPO_URL=https://github.com/shreyanshx/for-you.git \
